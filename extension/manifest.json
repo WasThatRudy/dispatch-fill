@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Dispatch Fill",
+  "version": "1.0.0",
+  "description": "Fill the open application form with your profile, resume, and drafted message from Dispatch (localhost:4310).",
+  "action": {
+    "default_title": "Fill this form via Dispatch"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["scripting", "activeTab"],
+  "host_permissions": ["http://localhost:4310/*"]
+}

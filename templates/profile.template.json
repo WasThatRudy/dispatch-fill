@@ -1,0 +1,20 @@
+{
+  "name": "Your Full Name",
+  "email": "you@example.com",
+  "phone": "+91-XXXXXXXXXX",
+  "github": "github.com/yourhandle",
+  "location": "City, Country",
+  "commonAnswers": {
+    "yearsOfExperience": "X",
+    "expectedSalary": "Negotiable, depends on role and scope",
+    "noticePeriod": "Available to start immediately",
+    "workAuthorization": "Citizen of X, authorized to work in X; would need sponsorship elsewhere",
+    "relocation": "Open to relocation / remote preferred",
+    "linkedin": "",
+    "website": "",
+    "dateOfBirth": "",
+    "gender": "",
+    "nationality": ""
+  },
+  "resumeSummary": "3-6 sentences of your real background. Every AI answer and cover letter is grounded in THIS text, so make it specific: employers with dates and what you shipped, open source, notable projects, education, differentiators."
+}

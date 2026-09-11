@@ -10,5 +10,5 @@
     "service_worker": "background.js"
   },
   "permissions": ["scripting", "activeTab"],
-  "host_permissions": ["http://localhost:4310/*"]
+  "host_permissions": ["http://localhost:4310/*", "<all_urls>"]
 }

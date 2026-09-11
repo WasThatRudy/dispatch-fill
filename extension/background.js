@@ -28,26 +28,42 @@ chrome.action.onClicked.addListener(async (tab) => {
 
     // Multi-step wizards (Workday etc.): fill the visible step, advance, repeat.
     // Never clicks Submit/Apply — only Next/Continue-style buttons.
-    const userStopped = async () =>
-      (await chrome.scripting.executeScript({ target, func: () => globalThis.__dispatchStop === true }))[0].result;
+    const userStopped = async (t) =>
+      (await chrome.scripting.executeScript({ target: t || target, func: () => globalThis.__dispatchStop === true }))[0].result;
 
     for (let step = 0; step < MAX_WIZARD_STEPS; step++) {
-      await chrome.scripting.executeScript({ target, func: waitForFormContent });
-      await fillOneStep(tab, data, step + 1);
-      if (await userStopped()) break;
+      // Find the frame that actually holds the form — sites like Stripe embed
+      // their Greenhouse application form in a cross-origin iframe.
+      let frameTarget = target;
+      for (let i = 0; i < 16; i++) {
+        const probes = await chrome.scripting
+          .executeScript({ target: { tabId: tab.id, allFrames: true }, func: countFormControls })
+          .catch(() => null);
+        const best = (probes || [])
+          .filter((p) => typeof p?.result === "number" && p.result > 0)
+          .sort((a, b) => b.result - a.result)[0];
+        if (best) {
+          frameTarget = { tabId: tab.id, frameIds: [best.frameId] };
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+      }
 
-      const [{ result: adv }] = await chrome.scripting.executeScript({ target, func: clickAdvance });
+      await fillOneStep(tab, data, step + 1, frameTarget);
+      if (await userStopped(frameTarget)) break;
+
+      const [{ result: adv }] = await chrome.scripting.executeScript({ target: frameTarget, func: clickAdvance });
       if (!adv) break; // no Next/Continue button — final step (or single-page form)
       let changed = false;
       for (let i = 0; i < 16; i++) {
         await new Promise((r) => setTimeout(r, 800));
-        const [{ result: sig }] = await chrome.scripting.executeScript({ target, func: pageSig });
+        const [{ result: sig }] = await chrome.scripting.executeScript({ target: frameTarget, func: pageSig });
         if (sig !== adv.sig) { changed = true; break; }
       }
       if (!changed) {
         // validation likely blocked the advance — stop and let the user fix it
         await chrome.scripting.executeScript({
-          target,
+          target: frameTarget,
           func: (msg) => {
             const t = document.getElementById("__dispatch_toast");
             if (t) t.innerHTML += `<br><span style="color:#f87171">${msg}</span>`;
@@ -67,8 +83,8 @@ chrome.action.onClicked.addListener(async (tab) => {
 });
 
 // One fill pass over the currently visible form content.
-async function fillOneStep(tab, data, stepNum) {
-  const target = { tabId: tab.id };
+async function fillOneStep(tab, data, stepNum, frameTarget) {
+  const target = frameTarget || { tabId: tab.id };
   const [{ result }] = await chrome.scripting.executeScript({
     target,
     func: fillForm,
@@ -102,7 +118,7 @@ async function fillOneStep(tab, data, stepNum) {
             return { ...a, label: f?.label || "", type: f?.type || "text" };
           });
           await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
+            target,
             func: applyAnswers,
             args: [enriched, leftover.length, false],
           });
@@ -123,7 +139,7 @@ async function fillOneStep(tab, data, stepNum) {
           if (!res.ok) throw new Error(`cover letter HTTP ${res.status}`);
           const { pdfB64, filename } = await res.json();
           await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
+            target,
             func: attachCoverLetter,
             args: [pdfB64, filename],
           });
@@ -230,16 +246,11 @@ function reapplyInstantFills(data) {
   return n;
 }
 
-// Injected: wait (up to 8s) for form controls to render — SPA steps load lazily.
-async function waitForFormContent() {
-  const hasControls = () =>
-    [...document.querySelectorAll('input, textarea, select, [role="listbox"], [role="radio"]')]
-      .some((el) => el.offsetParent !== null || el.type === "file");
-  for (let i = 0; i < 16; i++) {
-    if (hasControls()) return true;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  return false;
+// Injected into every frame: how many visible form controls live here?
+// Used to find the frame that actually holds the application form.
+function countFormControls() {
+  return [...document.querySelectorAll("input, textarea, select, [role='listbox'], [role='radio']")]
+    .filter((el) => el.offsetParent !== null || el.type === "file").length;
 }
 
 // Injected: cheap content signature to detect wizard step changes.
